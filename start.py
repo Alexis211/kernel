@@ -1,17 +1,20 @@
 #!/usr/bin/env python2
 
 import subprocess
-import sys
-import os
-import random
-import time
+
 import csv
 import numpy
 from scipy.signal import convolve2d
-from sklearn import svm, decomposition, discriminant_analysis, cross_validation
-import matplotlib.pyplot as plt
 
-from Oscar import Oscar
+from sklearn import svm
+
+
+params = {'gf_psi': 2.859,
+          'gf_gamma': 1.703,
+          'gf_lambda': 7.086,
+          'gf_sigma': 3.765,
+          'nu': -4.938,
+          'gamma': -1.141}
 
 
 # Gabor filters
@@ -30,9 +33,8 @@ def gabor_fn(sigma,theta,Lambda,psi,gamma, r=5):
     gb= numpy.exp(-.5*(x_theta**2/sigma_x**2+y_theta**2/sigma_y**2))*numpy.cos(2*numpy.pi/Lambda*x_theta+psi);
     return gb
 
+# ------------------------- LOAD DATA
 
-
-scientist = Oscar('Brsw0L6x4vxebEDU9BNVySwGDDAYEqgd0kXE0OGKag9zfnNlbnNvdXQtb3NjYXJyEQsSBFVzZXIYgICAgLrGgQoM')
 
 # Check we have the files
 files = [
@@ -48,193 +50,59 @@ for f, md5 in files:
 
 # Load data
 print "Load Xtr"
-Xtrva = numpy.loadtxt('Xtr.csv', delimiter=',')
+Xtr = numpy.loadtxt('Xtr.csv', delimiter=',')
 print "Load Ytr"
-Ytrva = numpy.loadtxt('Ytr.csv', delimiter=',', skiprows=1)
+Ytr = numpy.loadtxt('Ytr.csv', delimiter=',', skiprows=1)
 print "Load Xte"
 Xte = numpy.loadtxt('Xte.csv', delimiter=',')
 
 
-exp = {'name': ' '.join(sys.argv)}
+# ----------------------- PREPROCESS DATA
 
+print "Normalizing data..."
+Xtr /= numpy.linalg.norm(Xtr, 2, axis=1, keepdims=True)
+Xte /= numpy.linalg.norm(Xte, 2, axis=1, keepdims=True)
+
+print "Apply gabor filters..."
+filters = [gabor_fn(params['gf_sigma'], x, params['gf_lambda'],
+                         params['gf_psi'], params['gf_gamma'])
+          for x in numpy.arange(0.,2*numpy.pi-0.01, 2*numpy.pi/6)]
+def gf(x):
+    x = x.reshape((-1, 28, 28))
+    x = numpy.concatenate([
+            numpy.concatenate([convolve2d(x[i,:,:], f, 'same')[None, :, :]
+                               for i in range(x.shape[0])],
+                              axis=0)[:, :, :, None]
+            for f in filters], axis=3)
+    x = x.reshape((-1, 7, 4, 7, 4, len(filters)))
+    x = abs(x).mean(axis=4).mean(axis=2)
+    x = x.reshape((x.shape[0],-1))
+    return x
+Xtr = gf(Xtr)
+Xte = gf(Xte)
+
+print "Centering features for data..."
+xmean = Xte.mean(axis=0, keepdims=True)
+Xte -= xmean
+Xtr -= xmean
 
 # ------------------------------------- ONE OF VARIOUS CLASSIFIERS
 
-if "--kpca" in sys.argv:
-    exp['parameters'] = {
-           'n_pc': {"min": 2, "max": 100,"step":1},
-           'gamma': {"min": numpy.log(1./784. * 1e-2),
-                     "max": numpy.log(1./784. * 1e4)},
-       }
-    class Classifier:
-        def __init__(self, job):
-            self.pca = decomposition.KernelPCA(n_components=job['n_pc'], 
-                                               kernel='rbf',
-                                               gamma=numpy.exp(job['gamma']))
-            self.cl = discriminant_analysis.QuadraticDiscriminantAnalysis()
-        def fit(self, x, y):
-            xtr = self.pca.fit_transform(x)
-            self.cl.fit(xtr, y)
-        def predict(self, x):
-            xtr = self.pca.transform(x)
-            return self.cl.predict(xtr)
-    classifier = Classifier
-
-if "--gaussian" in sys.argv:
-    exp['parameters'] = {
-           'gamma': {"min": numpy.log(1./784. * 1),
-                     "max": numpy.log(1./784. * 1e6)},
-           'nu': {"min": numpy.log(1./4500. * 1),
-                  "max": numpy.log(1./4500. * 100)},
-       }
-    classifier = (lambda job:
-        svm.NuSVC(kernel='rbf', gamma=numpy.exp(job['gamma']),
-                                nu=numpy.exp(job['nu']))
-    )
-
-if "--poly" in sys.argv:
-    exp['parameters'] = {
-               'r': {"min": 0.5, "max": 2.},
-               'nu': {"min": numpy.log(1./4500. * 0.01),
-                      "max": numpy.log(1./4500. * 1000)},
-           }
-    classifier = (lambda job:
-            svm.NuSVC(kernel='poly', degree=2, coef0=job['r'],
-                      nu=numpy.exp(job['nu']),
-                      decision_function_shape='ovr', cache_size=2000)
-    )
-
-if "--linear" in sys.argv:
-    exp['parameters'] = {
-               'C': {"min": numpy.log(0.1),
-                     "max": numpy.log(10.)}
-           }
-
-    classifier = (lambda job:
-                svm.LinearSVC(C=numpy.exp(job['C']), dual=False, tol=1e-3)
-    )
-
-
-# ----------------------- Add various normalization techniques
-
-for pp in reversed(sys.argv):
-    if pp == "--normalize-ex":
-        def add_normalize(cl):
-            class No:
-                def __init__(self, job):
-                    self.cl = cl(job)
-                def fit(self, x, y):
-                    print "Normalizing training data..."
-                    xnorm = numpy.linalg.norm(x, 2, axis=1, keepdims=True)
-                    self.cl.fit(x / xnorm, y)
-                def predict(self, x):
-                    xnorm = numpy.linalg.norm(x, 2, axis=1, keepdims=True)
-                    return self.cl.predict(x / xnorm)
-            return No
-        classifier = add_normalize(classifier)
-
-    if pp == "--center-feature":
-        def add_cf(cl):
-            class CF:
-                def __init__(self, job):
-                    self.cl = cl(job)
-                def fit(self, x, y):
-                    print "Centering features for training data..."
-                    self.xmean = x.mean(axis=0, keepdims=True)
-                    self.cl.fit(x - self.xmean, y)
-                def predict(self, x):
-                    return self.cl.predict(x - self.xmean)
-            return CF
-        classifier = add_cf(classifier)
-
-    if pp == "--gabor":
-        exp['parameters'].update({
-            'gf_sigma': {"min": 0.2, "max": 5},
-            'gf_lambda': {"min": 1, "max": 10},
-            'gf_psi': {"min": -numpy.pi, "max": numpy.pi},
-            'gf_gamma': {"min": 0.5, "max": 2},
-        })
-        def add_gabor(cl):
-            class GaborPreClassifier:
-                def __init__(self, job):
-                    self.cl = cl(job)
-                    self.filters = [gabor_fn(job['gf_sigma'], x, job['gf_lambda'],
-                                             job['gf_psi'], job['gf_gamma'])
-                                    for x in numpy.arange(0.,2*numpy.pi-0.01, 2*numpy.pi/6)]
-                def transform(self, x):
-                    x = x.reshape((-1, 28, 28))
-                    x = numpy.concatenate([
-                            numpy.concatenate([convolve2d(x[i,:,:], f, 'same')[None, :, :]
-                                               for i in range(x.shape[0])],
-                                              axis=0)[:, :, :, None]
-                            for f in self.filters], axis=3)
-                    x = x.reshape((-1, 7, 4, 7, 4, len(self.filters)))
-                    x = abs(x).mean(axis=4).mean(axis=2)
-                    x = x.reshape((x.shape[0],-1))
-                    return x
-                def fit(self, x, y):
-                    print "Passing training data through Gabor filter bank..."
-                    self.cl.fit(self.transform(x), y)
-                def predict(self, x):
-                    return self.cl.predict(self.transform(x))
-            return GaborPreClassifier
-        classifier = add_gabor(classifier)
+c= svm.NuSVC(kernel='rbf', gamma=numpy.exp(params['gamma']),
+             nu=numpy.exp(params['nu']))
 
 
 # --------------------------- RUN IT
 
-best = None
-best_p = None
 
-try:
-    for i in range(0):
-        try:
-            job = scientist.suggest(exp)
-            time.sleep(2)
-        except:
-            break
-        print job
+print "Fitting model with with", params
+c.fit(Xtr, Ytr[:, 1])
 
-        idx = list(range(Xtrva.shape[0]))
-        random.shuffle(idx)
-
-        split = range(0, len(idx), len(idx)/5) + [len(idx)]
-        score = []
-        for i in range(1, len(split)):
-            a, b = split[i-1:i+1]
-            train, valid = idx[:a]+idx[b:], idx[a:b]
-            c = classifier(job)
-            c.fit(Xtrva[train,:], Ytrva[train,1])
-            score.append(numpy.not_equal(c.predict(Xtrva[valid,:]), Ytrva[valid,1]).mean())
-            print a, b, score[-1]
-        error_rate = numpy.array(score).mean()
-
-        print "   error_rate=", error_rate
-        scientist.update(job, {'loss': error_rate})
-        if best == None or error_rate < best:
-            best_p = job
-            best = error_rate
-except KeyboardInterrupt:
-    pass
-
-best_p = {
-        'gf_psi': 2.859,
-        'gf_gamma': 1.703,
-        'gf_lambda': 7.086,
-        'gf_sigma': 3.765,
-        'nu': -4.938,
-        'gamma': -1.141
-    }
-best = 0.027
-
-
-print "Fitting model with with", best_p
-c = classifier(best_p)
-c.fit(Xtrva, Ytrva[:, 1])
+print "Doing classification"
 y = c.predict(Xte)
 
-print "Doing final classification"
-f = open('Yte-%02.4f.csv'%(best*100), 'w')
+print "Writing Yte"
+f = open('Yte.csv', 'w')
 w = csv.writer(f)
 w.writerow(['Id', 'Prediction'])
 for i in range(y.shape[0]):
