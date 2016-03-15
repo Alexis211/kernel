@@ -6,7 +6,7 @@ import csv
 import numpy
 from scipy.signal import convolve2d
 
-from sklearn import svm
+import mySVM as mysvm
 
 
 params = {'gf_psi': 2.859,
@@ -88,7 +88,7 @@ Xtr -= xmean
 
 # ------------------------------------- ONE OF VARIOUS CLASSIFIERS
 
-c= svm.NuSVC(kernel='rbf', gamma=numpy.exp(params['gamma']),
+c= mysvm.NuSVM(kernel='rbf', gamma=numpy.exp(params['gamma']),
              nu=numpy.exp(params['nu']))
 
 

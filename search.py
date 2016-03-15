@@ -10,6 +10,7 @@ import numpy
 from scipy.signal import convolve2d
 from sklearn import svm, decomposition, discriminant_analysis, cross_validation
 import matplotlib.pyplot as plt
+import mySVM as mysvm
 
 from Oscar import Oscar
 
@@ -89,7 +90,32 @@ if "--gaussian" in sys.argv:
        }
     classifier = (lambda job:
         svm.NuSVC(kernel='rbf', gamma=numpy.exp(job['gamma']),
+                                nu=numpy.exp(job['nu']),
+                                decision_function_shape='ovo')
+    )
+
+if "--gaussian-nusvm" in sys.argv:
+    exp['parameters'] = {
+           'gamma': {"min": numpy.log(1./784. * 1),
+                     "max": numpy.log(1./784. * 1e6)},
+           'nu': {"min": numpy.log(1./4500. * 1),
+                  "max": numpy.log(1./4500. * 100)},
+       }
+    classifier = (lambda job:
+        mysvm.NuSVM(kernel='rbf', gamma=numpy.exp(job['gamma']),
                                 nu=numpy.exp(job['nu']))
+    )
+
+if "--gaussian-csvm" in sys.argv:
+    exp['parameters'] = {
+           'gamma': {"min": numpy.log(1./784. * 1),
+                     "max": numpy.log(1./784. * 1e6)},
+           'c': {"min": numpy.log(1),
+                 "max": numpy.log(1000)},
+       }
+    classifier = (lambda job:
+        mysvm.CSVM(kernel='rbf', gamma=numpy.exp(job['gamma']),
+                                C=numpy.exp(job['c']))
     )
 
 if "--poly" in sys.argv:
@@ -187,7 +213,7 @@ best = None
 best_p = None
 
 try:
-    for i in range(0):
+    for i in range(100):
         try:
             job = scientist.suggest(exp)
             time.sleep(2)
@@ -216,17 +242,6 @@ try:
             best = error_rate
 except KeyboardInterrupt:
     pass
-
-best_p = {
-        'gf_psi': 2.859,
-        'gf_gamma': 1.703,
-        'gf_lambda': 7.086,
-        'gf_sigma': 3.765,
-        'nu': -4.938,
-        'gamma': -1.141
-    }
-best = 0.027
-
 
 print "Fitting model with with", best_p
 c = classifier(best_p)
