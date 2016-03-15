@@ -233,6 +233,7 @@ try:
             c.fit(Xtrva[train,:], Ytrva[train,1])
             score.append(numpy.not_equal(c.predict(Xtrva[valid,:]), Ytrva[valid,1]).mean())
             print a, b, score[-1]
+            if score[-1] > 0.2: break # gain time
         error_rate = numpy.array(score).mean()
 
         print "   error_rate=", error_rate
