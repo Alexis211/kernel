@@ -9,12 +9,14 @@ from scipy.signal import convolve2d
 import mySVM as mysvm
 
 
-params = {'gf_psi': 2.859,
-          'gf_gamma': 1.703,
-          'gf_lambda': 7.086,
-          'gf_sigma': 3.765,
-          'nu': -4.938,
-          'gamma': -1.141}
+params = {
+          'c': 5.574,
+          'gf_psi': -0.556,
+          'gf_gamma': 1.386,
+          'gf_lambda': 5.942,
+          'gf_sigma': 2.239,
+          'gamma': 0.307
+}
 
 
 # Gabor filters
@@ -88,8 +90,8 @@ Xtr -= xmean
 
 # ------------------------------------- ONE OF VARIOUS CLASSIFIERS
 
-c= mysvm.NuSVM(kernel='rbf', gamma=numpy.exp(params['gamma']),
-             nu=numpy.exp(params['nu']))
+c= mysvm.CSVM(kernel='rbf', gamma=numpy.exp(params['gamma']),
+             C=numpy.exp(params['c']))
 
 
 # --------------------------- RUN IT
