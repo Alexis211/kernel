@@ -1,4 +1,4 @@
-<TeXmacs|1.99.2>
+<TeXmacs|1.99.4>
 
 <style|generic>
 
@@ -66,28 +66,32 @@
 
   The value of <math|\<gamma\>> we used is <math|\<gamma\>=0.7357>.
 
-  A kernel <math|C>-SVM classifier is a function defined by:
+  A kernel <math|C>-SVM is defined as a solution of the following
+  minimization problem:
+
+  <\equation*>
+    <tabular*|<tformat|<cwith|1|2|1|2|cell-halign|r>|<cwith|1|-1|2|2|cell-halign|l>|<cwith|1|1|3|3|cell-width|1cm>|<cwith|1|1|3|3|cell-hmode|max>|<table|<row|<cell|min<rsub|\<omega\>,\<xi\>,b>
+    >|<cell|<frac|1|2><around*|\<\|\|\>|w|\<\|\|\>><rsub|2><rsup|2>+C<big|sum><rsub|i=1><rsup|m>\<xi\><rsub|i>>|<cell|>|<cell|>>|<row|<cell|subject
+    to>|<cell|\<xi\><rsub|i>\<geqslant\>0>|<cell|>|<cell|i=1\<ldots\>n>>|<row|<cell|>|<cell|y<rsub|i>*<around*|(|w<rsup|T>\<phi\><around*|(|x<rsub|i>|)>+b|)>\<geqslant\>1-\<xi\><rsub|i>>|<cell|>|<cell|i=1\<ldots\>n>>>>>
+  </equation*>
+
+  Its dual is defined as follows:
+
+  <\equation*>
+    <tabular*|<tformat|<cwith|1|-1|2|2|cell-halign|l>|<cwith|1|2|1|1|cell-halign|r>|<cwith|1|1|3|3|cell-width|1cm>|<cwith|1|1|3|3|cell-hmode|max>|<table|<row|<cell|min<rsub|\<alpha\>>>|<cell|<frac|1|2><big|sum><rsub|i,j=1><rsup|n>\<alpha\><rsub|i>\<alpha\><rsub|j>y<rsub|i>y<rsub|i>K<around*|(|x<rsub|i>,x<rsub|j>|)>-\<b-1\><rsup|T>\<alpha\>>|<cell|>|<cell|>>|<row|<cell|subject
+    to>|<cell|\<alpha\><rsup|T>y=0>|<cell|>|<cell|>>|<row|<cell|>|<cell|0\<leqslant\>\<alpha\><rsub|i>\<leqslant\>C>|<cell|>|<cell|i=1\<ldots\>n>>>>>
+  </equation*>
+
+  The dual is a quadratic problem which we implemented and solved using the
+  <verbatim|cvxopt> library for Numpy. The classifier is the defined as
+  follows, where <math|<wide|\<alpha\>|^>> is a solution of the dual:
 
   <\eqnarray*>
-    <tformat|<table|<row|<cell|<wide|f|^><around*|(|x|)>>|<cell|=>|<cell|sign<around*|(|K<around*|(|w,x<rsub|i>|)>+b|)>>>>>
+    <tformat|<table|<row|<cell|f<around*|(|x|)>>|<cell|=>|<cell|sign<around*|(|<big|sum><rsub|i=1><rsup|n><wide|\<alpha\>|^><rsub|i>y<rsub|i>K<around*|(|x,x<rsub|i>|)>+b|)>>>>>
   </eqnarray*>
 
-  where <math|<wide|w|^>> is a solution of:
-
-  <\eqnarray*>
-    <tformat|<table|<row|<cell|minimize >|<cell|>|<cell|<frac|1|2><around*|\<\|\|\>|w|\<\|\|\>><rsub|2><rsup|2>+C<big|sum><rsub|i=1><rsup|m>\<xi\><rsub|i>>>|<row|<cell|subject
-    to>|<cell|>|<cell|\<xi\><rsub|i>\<geqslant\>0<text|
-    \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ >
-    i=1\<ldots\>n>>|<row|<cell|>|<cell|>|<cell|y<rsub|i>\<cdot\><around*|(|w<rsup|T>\<phi\><around*|(|x<rsub|i>|)>+b|)>\<geqslant\>1-\<xi\><rsub|i><text|
-    \ \ \ \ \ \ >i=1\<ldots\>n>>>>
-  </eqnarray*>
-
-  The parameter <math|C> that we used is <math|C=263>.
-
-  We implemented the <math|C>-SVM by calculating the dual of this problem,
-  which is a quadratic problem. We solve the dual using the <verbatim|cvxopt>
-  library for Numpy. We use a one vs. one voting strategy to handle the 10
-  classes of the dataset.
+  We use a one vs. one voting strategy to handle the 10 classes of the
+  dataset. The parameter <math|C> that we used is <math|C=263>.
 
   We also implemented a <math|\<nu\>>-SVM classifier to compare the results,
   but the <math|C>-SVM was found to perform better.
